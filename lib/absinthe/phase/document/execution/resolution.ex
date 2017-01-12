@@ -192,7 +192,8 @@ defmodule Absinthe.Phase.Document.Execution.Resolution do
     full_type = Type.expand(bp_field.schema_node.type, info.schema)
 
     with %{__reference__: %{identifier: :mutation}} <- info.parent_type do
-      Absinthe.Subscriptions.publish_from_mutation(Chat.Endpoint, info, result)
+      pubsub = info.schema.pubsub()
+      Absinthe.Subscriptions.publish_from_mutation(pubsub, info, result)
     end
 
     result
