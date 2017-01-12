@@ -122,7 +122,19 @@ defmodule Absinthe.Type.Field do
                __private__: Keyword.t,
                __reference__: Type.Reference.t}
 
-  defstruct name: nil, description: nil, type: nil, deprecation: nil, args: %{}, resolve: nil, default_value: nil, __private__: [], __reference__: nil
+  defstruct [
+    name: nil,
+    description: nil,
+    type: nil,
+    deprecation: nil,
+    args: %{},
+    topic: nil, # used by subscription fields
+    triggers: nil, # used by mutation fields
+    resolve: nil,
+    default_value: nil,
+    __private__: [],
+    __reference__: nil
+  ]
 
   @doc """
   Build an AST of the field map for inclusion in other types
