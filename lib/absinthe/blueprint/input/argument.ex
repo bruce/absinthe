@@ -4,11 +4,12 @@ defmodule Absinthe.Blueprint.Input.Argument do
 
   alias Absinthe.Blueprint
 
-  @enforce_keys [:name, :source_location, :input_value]
+  @enforce_keys [:name]
   defstruct [
     :name,
-    :input_value,
-    :source_location,
+    # Added by parser
+    source_location: nil,
+    input_value: nil,
     # Added by phases
     schema_node: nil,
     value: nil, # Value converted to native elixir value
@@ -18,8 +19,8 @@ defmodule Absinthe.Blueprint.Input.Argument do
 
   @type t :: %__MODULE__{
     name: String.t,
-    input_value: Blueprint.Input.Value.t,
-    source_location: Blueprint.Document.SourceLocation.t,
+    input_value: nil | Blueprint.Input.Value.t,
+    source_location: nil | Blueprint.Document.SourceLocation.t,
     schema_node: nil | Absinthe.Type.Argument.t,
     value: any,
     flags: Blueprint.flags_t,
