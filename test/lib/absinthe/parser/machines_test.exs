@@ -55,6 +55,7 @@ defmodule Absinthe.Parser.MachinesTest do
   end
 
   @data %{input: "name,github\nbruce,bruce\nben,benwilson512", result: nil, history: []}
+  @bad_data %{input: "name,github\nbruce,bruce\nben,ben\"wilson512", result: nil, history: []}
   @result [~w(name github), ~w(bruce bruce), ~w(ben benwilson512)]
 
   describe "machine/2" do
@@ -86,7 +87,7 @@ defmodule Absinthe.Parser.MachinesTest do
     end
 
     test "can error" do
-      assert {:error, "Quotes aren't allowed", _} = Parser.run(%{@data | input: "foo\""})
+      assert {:error, "Quotes aren't allowed", _} = Parser.run(@bad_data)
     end
 
   end
