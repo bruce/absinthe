@@ -111,11 +111,15 @@ defmodule Absinthe.Parser.Machines do
     dest_func = Machines.transition_function_name(machine, config.transition || :match)
     match_func = Machines.transition_function_name(machine, :match)
     capture = {:&, [], [{:/, [context: env.module, import: Kernel], [{match_func, [], env.module}, 1]}]}
-    block_ast = config.block_ast || quote do: data__
+    block_ast = config.block_ast || quote do: {:ok, data__}
     quote do
       def unquote(this_func)(unquote(config.arg_ast) = data__) do
-        data__ = (unquote(block_ast))
-        unquote(dest_func)(%{data__ | history: [unquote(capture) | data__.history]})
+        case (unquote(block_ast)) do
+          {:ok, data__} ->
+            unquote(dest_func)(%{data__ | history: [unquote(capture) | data__.history]})
+          {:error, _msg, _data} = err ->
+            err
+        end
       end
     end
   end
@@ -132,11 +136,15 @@ defmodule Absinthe.Parser.Machines do
   def event_function(machine, :match, config, _) do
     this_func = Machines.transition_function_name(machine, :match)
     dest_func = Machines.transition_function_name(machine, config.transition || :match)
-    block_ast = config.block_ast || quote do: data__
+    block_ast = config.block_ast || quote do: {:ok, data__}
     quote do
       def unquote(this_func)(unquote(config.arg_ast) = data__) do
-        data__ = (unquote(block_ast))
-        unquote(dest_func)(data__)
+        case (unquote(block_ast)) do
+          {:ok, data__} ->
+            unquote(dest_func)(data__)
+          {:error, _msg, _data} = err ->
+            err
+        end
       end
     end
   end
@@ -150,7 +158,7 @@ defmodule Absinthe.Parser.Machines do
     this_func = Machines.transition_function_name(machine, :exit)
     quote do
       def unquote(this_func)(%{history: [_]} = data__) do
-        %{data__ | history: []}
+        {:ok, %{data__ | history: []}}
       end
       def unquote(this_func)(%{history: [_ | [dest_func | _] = previous_machines]} = data__) do
         dest_func.(%{data__ | history: previous_machines})
@@ -160,17 +168,25 @@ defmodule Absinthe.Parser.Machines do
   # Custom
   def event_function(machine, :exit, config, _) do
     this_func = Machines.transition_function_name(machine, :exit)
-    block_ast = config.block_ast || quote do: data__
+    block_ast = config.block_ast || quote do: {:ok, data__}
     quote do
       def unquote(this_func)(%{history: [_]} = data__) do
         unquote(config.arg_ast) = data__
-        data__ = (unquote(block_ast))
-        %{data__ | history: []}
+        case (unquote(block_ast)) do
+          {:ok, data__} ->
+            {:ok, %{data__ | history: []}}
+          {:error, _msg, _data} = err ->
+            err
+        end
       end
       def unquote(this_func)(%{history: [_ | [dest_func | _] = previous_machines]} = data__) do
         unquote(config.arg_ast) = data__
-        data__ = (unquote(block_ast))
-        dest_func.(%{data__ | history: previous_machines})
+        case (unquote(block_ast)) do
+          {:ok, data__} ->
+            dest_func.(%{data__ | history: previous_machines})
+          {:error, _msg, _data} = err ->
+            err
+        end
       end
     end
   end

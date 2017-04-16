@@ -10,41 +10,44 @@ defmodule Absinthe.Parser.MachinesTest do
 
     machine :document do
       enter data, :match  do
-        %{data | result: []}
+        {:ok, %{data | result: []}}
       end
       match %{input: ""}, :exit
       match _, :row
       exit data do
-        %{data | result: Enum.reverse(data.result)}
+        {:ok, %{data | result: Enum.reverse(data.result)}}
       end
     end
 
     machine :row do
       enter data, :cell do
-        %{data | result: [[] | data.result]}
+        {:ok, %{data | result: [[] | data.result]}}
       end
       match %{input: "\n" <> rest} = data, :exit do
-        %{data | input: rest}
+        {:ok, %{data | input: rest}}
       end
       match %{input: "," <> rest} = data, :cell do
-        %{data | input: rest}
+        {:ok, %{data | input: rest}}
       end
       match %{input: <<_::size(8)>> <> _}, :cell
       match _, :exit
       exit %{result: [row | rows]} = data do
-        %{data | result: [Enum.reverse(row) | rows]}
+        {:ok, %{data | result: [Enum.reverse(row) | rows]}}
       end
     end
 
     machine :cell do
       enter %{result: [row | rows]} = data, :match do
-        %{data | result: [["" | row] | rows]}
+        {:ok, %{data | result: [["" | row] | rows]}}
       end
       match %{input: "," <> _}, :exit
       match %{input: "\n" <> _}, :exit
+      match %{input: "\"" <> _} = data do
+        {:error, "Quotes aren't allowed", data}
+      end
       match %{input: <<char::size(8)>> <> rest, result: [[cell | cells] | rows]} = data, :match do
         cell = cell <> <<char::size(8)>>
-        %{data | input: rest, result: [[cell | cells] | rows]}
+        {:ok, %{data | input: rest, result: [[cell | cells] | rows]}}
       end
       match %{input: "" <> _}, :exit
     end
@@ -79,7 +82,11 @@ defmodule Absinthe.Parser.MachinesTest do
   describe "run/1" do
 
     test "executes correctly" do
-      assert %{@data | result: @result, input: ""} == Parser.run(@data)
+      assert {:ok, %{@data | result: @result, input: ""}} == Parser.run(@data)
+    end
+
+    test "can error" do
+      assert {:error, "Quotes aren't allowed", _} = Parser.run(%{@data | input: "foo\""})
     end
 
   end
