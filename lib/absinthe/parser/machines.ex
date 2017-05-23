@@ -101,7 +101,7 @@ defmodule Absinthe.Parser.Machines do
     capture = {:&, [], [{:/, [context: env.module, import: Kernel], [{dest_func, [], env.module}, 1]}]}
     quote do
       def unquote(this_func)(data__) do
-        unquote(dest_func)(%{data__ | history: [unquote(capture) | data__.history]})
+        unquote(dest_func)(%{data__ | history: [{unquote(machine), unquote(capture)} | data__.history]})
       end
     end
   end
@@ -116,7 +116,7 @@ defmodule Absinthe.Parser.Machines do
       def unquote(this_func)(unquote(config.arg_ast) = data__) do
         case (unquote(block_ast)) do
           {:ok, data__} ->
-            unquote(dest_func)(%{data__ | history: [unquote(capture) | data__.history]})
+            unquote(dest_func)(%{data__ | history: [{unquote(machine), unquote(capture)} | data__.history]})
           {:error, _msg, _data} = err ->
             err
         end
@@ -160,7 +160,7 @@ defmodule Absinthe.Parser.Machines do
       def unquote(this_func)(%{history: [_]} = data__) do
         {:ok, %{data__ | history: []}}
       end
-      def unquote(this_func)(%{history: [_ | [dest_func | _] = previous_machines]} = data__) do
+      def unquote(this_func)(%{history: [_ | [{_, dest_func} | _] = previous_machines]} = data__) do
         dest_func.(%{data__ | history: previous_machines})
       end
     end
@@ -179,7 +179,7 @@ defmodule Absinthe.Parser.Machines do
             err
         end
       end
-      def unquote(this_func)(%{history: [_ | [dest_func | _] = previous_machines]} = data__) do
+      def unquote(this_func)(%{history: [_ | [{_, dest_func} | _] = previous_machines]} = data__) do
         unquote(config.arg_ast) = data__
         case (unquote(block_ast)) do
           {:ok, data__} ->

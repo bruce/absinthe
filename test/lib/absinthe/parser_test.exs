@@ -19,7 +19,7 @@ defmodule Absinthe.ParserTest do
         assert {
           :ok,
           %Blueprint{operations: [%Blueprint.Document.Operation{type: :query, source_location: %{column: 1, line: 1}}]},
-          %{cursor: {3, 1}}
+          %{col: 3, row: 1}
         } = parse("{}")
       end
 
@@ -27,11 +27,13 @@ defmodule Absinthe.ParserTest do
         assert {
           :ok,
           %Blueprint{operations: [%Blueprint.Document.Operation{type: :query, source_location: %{column: 2, line: 1}}]},
-          %{cursor: {7, 2}}
+          %{col: 7, row: 2}
         } = parse(" { \n } ")
       end
 
     end
+
+    # TODO --- Get non-anonymous bits working
 
     describe "on query" do
 

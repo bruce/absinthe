@@ -2,6 +2,57 @@ defmodule Absinthe.Parser.Notation do
 
   alias Absinthe.{Blueprint, Parser}
 
+  defmacro match_and_skip_horizontal_whitespace do
+    for word <- [" ", "\t"] do
+      quote do
+        match %{rest: unquote(word) <> rest} = data, :match do
+          {:ok, %{data | rest: rest, col: data.col + 1}}
+        end
+      end
+    end
+  end
+
+  defmacro match_and_skip_vertical_whitespace do
+    quote do
+      match %{rest: "\n" <> rest} = data, :match do
+        {:ok, %{data | rest: rest, row: data.row + 1}}
+      end
+    end
+  end
+
+  defmacro match_and_skip_whitespace do
+    quote do
+      match_and_skip_horizontal_whitespace()
+      match_and_skip_vertical_whitespace()
+    end
+  end
+
+  defmacro match_eof do
+    quote do
+      match %{rest: "", history: [{machine, _} | _]} = data, :exit do
+        case data.result do
+          [single] ->
+            {:ok, data}
+          _ ->
+            parse_error(data, machine)
+        end
+      end
+    end
+  end
+
+  defmacro end_matches do
+    quote do
+      match_eof
+      match input, :exit do
+        parse_error(input, :query)
+      end
+    end
+  end
+
+  #
+  # OLD
+  #
+
   defmacro skip(name, words) when is_list(words) do
     for word <- words do
       size = byte_size(word)
@@ -75,9 +126,12 @@ defmodule Absinthe.Parser.Notation do
   end
 
   @spec source_location(Parser.t) :: Blueprint.Document.SourceLocation.t
-  def source_location(state) do
-    {column, line} = state.cursor
-    Blueprint.Document.SourceLocation.at(line, column)
+  def source_location(data) do
+    Blueprint.Document.SourceLocation.at(data.row, data.col)
+  end
+
+  def node(data, node_mod, attrs \\ %{}) do
+    {node_mod, Map.put(attrs, :source_location, source_location(data))}
   end
 
   @spec located(Blueprint.node_t, Parser.t) :: Blueprint.node_t

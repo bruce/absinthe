@@ -3,53 +3,95 @@ defmodule Absinthe.Parser do
   alias Absinthe.Blueprint
   import Absinthe.Parser.Notation
 
+  use Absinthe.Parser.Machines
+  alias Absinthe.Parser.Result
+
   @enforce_keys [:input, :rest]
   defstruct [
     :input,
     :rest,
-    cursor: {1, 1},
-    stack: [],
-    scopes: [],
+    col: 1,
+    row: 1,
+    cursor: {1, 1}, # to delete
+    result: [],
+    stack: [], # to deleet
+    history: [],
   ]
 
   @type t :: %__MODULE__{
     input: String.t,
     rest: String.t,
     cursor: {integer, integer},
+    result: [any],
     stack: [Blueprint.node_t],
-    scopes: [atom],
+    history: [atom],
   }
 
   defp new(input) do
     %__MODULE__{
       input: input,
       rest: input,
-      stack: [%Blueprint{}],
-      scopes: [:in_document]
+      stack: [],
+      result: [],
+      history: [],
     }
   end
 
   def run(text) do
-    new(text)
-    |> do_run
+    __run__(:document, new(text))
+    |> case do
+         {:ok, %{result: [result]} = full} ->
+           {:ok, result, full}
+         other ->
+           other
+       end
   end
 
-  def do_run(%{scopes: [scope_to_run | _]} = state) do
-    case apply(__MODULE__, scope_to_run, [state]) do
-      {:next, next_scopes, state} when is_list(next_scopes) ->
-        %{state | scopes: next_scopes ++ state.scopes}
-        |> do_run
-      {:next, next_scope, state} ->
-        %{state | scopes: [next_scope | state.scopes]}
-        |> do_run
-      {:prev, %{scopes: [_ | previous_scopes]} = state} ->
-        %{state | scopes: previous_scopes}
-        |> do_run
-      {:ok, _, _} = result ->
-        result
-      {:error, _, _} = result ->
-        result
+  machine :document do
+    enter data, :match do
+      {:ok, %{data | result: [{Blueprint, %{}} | data.result]}}
     end
+    match %{rest: "{" <> rest} = data, :query do
+      {:ok, %{data | result: [{:append, :operations} | data.result]}}
+    end
+    match %{rest: "query " <> rest} = data, :operation_name do # NOT WORKING
+      {:ok, %{data | result: [{:append, :operations} |  data.result]}}
+    end
+    match_and_skip_whitespace
+    end_matches()
+    exit data do
+      {:ok, %{data | result: Result.commit(data.result)}}
+    end
+  end
+
+  machine :query do
+    enter %{rest: "{" <> rest} = data, :match do
+      {
+        :ok,
+        %{
+          data |
+          rest: rest,
+          result: [
+            node(data, Blueprint.Document.Operation, %{type: :query})
+            |
+            data.result
+          ],
+          col: data.col + 1
+        }
+      }
+    end
+    match %{rest: "}" <> rest} = data, :exit do
+      {:ok, %{data | rest: rest, col: data.col + 1}}
+    end
+    match_and_skip_whitespace
+    end_matches()
+    exit data do
+      {:ok, %{data | result: Result.commit(data.result)}}
+    end
+  end
+
+  machine :mutation do
+    match _, :exit
   end
 
   @name_first '_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
