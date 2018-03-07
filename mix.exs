@@ -56,7 +56,8 @@ defmodule Absinthe.Mixfile do
       {:dialyze, "~> 0.2", only: :dev},
       {:decimal, "~> 1.0", optional: true},
       {:phoenix_pubsub, ">= 0.0.0", only: :test},
-      {:mix_test_watch, "~> 0.4.1", only: [:test, :dev]}
+      {:mix_test_watch, "~> 0.4.1", only: [:test, :dev]},
+      {:nimble_parsec, "~> 0.2"},
     ]
   end
 
