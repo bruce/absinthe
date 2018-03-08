@@ -56,7 +56,7 @@ defmodule Absinthe.Parser do
   comment =
     ignore(string("#"))
     |> repeat_while(source_character, {:not_line_terminator, []})
-    |> traverse({:tagged_string, [:comment]})
+    |> traverse({:string_token, [:comment]})
 
   defparsec :__comment__, comment
 
@@ -64,11 +64,10 @@ defmodule Absinthe.Parser do
   defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(_, context, _, _), do: {:cont, context}
 
-  defp tagged_string(_rest, chars, context, _, _, tag) do
+  defp string_token(_rest, chars, context, _, _, tag) do
     string = chars |> Enum.reverse |> List.to_string
     {[{tag, string}], context}
   end
-
 
   # Comma ::
   #   ,
@@ -102,7 +101,7 @@ defmodule Absinthe.Parser do
       ascii_char([?!, ?$, ?(, ?), ?:, ?=, ?@, ?[, ?], ?{, ?|, ?}]),
       string("...")
     ])
-    |> traverse({:lookup_punctuator, []})
+    |> traverse({:punctuator_token, []})
 
   @punctuators %{
     ?! => :exclamation,
@@ -120,7 +119,7 @@ defmodule Absinthe.Parser do
     "..." => :ellipsis,
   }
 
-  defp lookup_punctuator(_rest, [punct], context, _, _) do
+  defp punctuator_token(_rest, [punct], context, _, _) do
     {[punctuator: Map.fetch!(@punctuators, punct)], context}
   end
 
@@ -131,7 +130,7 @@ defmodule Absinthe.Parser do
   name =
     ascii_char([?_..?_, ?A..?Z, ?a..?z])
     |> times(ascii_char([?0..?9, ?_..?_, ?A..?Z, ?a..?z]), min: 1)
-    |> traverse({:tagged_string, [:name]})
+    |> traverse({:string_token, [:name]})
 
   defparsec :__name__, name
 
@@ -181,12 +180,12 @@ defmodule Absinthe.Parser do
   int_value =
     optional(ascii_char([?-]))
     |> integer(min: 1)
-    |> traverse({:sign_int_value, []})
+    |> traverse({:int_value_token, []})
 
-  defp sign_int_value(_rest, [int, _neg], context, _, _) do
+  defp int_value_token(_rest, [int, _neg], context, _, _) do
     {[int_value: int * -1], context}
   end
-  defp sign_int_value(_rest, [int], context, _, _) do
+  defp int_value_token(_rest, [int], context, _, _) do
     {[int_value: int], context}
   end
 
@@ -253,7 +252,7 @@ defmodule Absinthe.Parser do
     ignore(ascii_char([@quote]))
     |> repeat_while(string_character, {:not_end_of_quote, []})
     |> ignore(ascii_char([@quote]))
-    |> traverse({:tagged_string, [:string_value]})
+    |> traverse({:string_token, [:string_value]})
 
   defparsec :__string_value__, string_value
 
@@ -274,8 +273,8 @@ defmodule Absinthe.Parser do
     choice([
       punctuator,
       name,
-      int_value,
       float_value,
+      int_value,
       string_value
     ])
 
