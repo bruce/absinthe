@@ -54,7 +54,7 @@ defmodule Absinthe.Parser do
   # CommentChar ::
   #   SourceCharacter but not LineTerminator
   comment =
-    string("#")
+    ignore(string("#"))
     |> repeat_while(source_character, {:not_line_terminator, []})
 
   # Comma ::
@@ -221,6 +221,7 @@ defmodule Absinthe.Parser do
     __entry__(input, opts)
   end
 
+  defparsec :__comment__, comment
   defparsec :__escaped_character__, escaped_character
   defparsec :__escaped_unicode__, escaped_unicode
   defparsec :__string_character__, string_character

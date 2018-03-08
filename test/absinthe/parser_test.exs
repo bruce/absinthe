@@ -1,6 +1,14 @@
 defmodule Absinthe.ParserTest do
   use Absinthe.Case, async: true
 
+  describe "comment" do
+
+    test "works" do
+      assert {:ok, 'foo', "", _, _, _} = Absinthe.Parser.__comment__(~S(#foo))
+    end
+
+  end
+
   describe "string_value" do
 
     test "normal" do
