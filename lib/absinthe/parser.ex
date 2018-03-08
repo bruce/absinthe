@@ -157,14 +157,75 @@ defmodule Absinthe.Parser do
       integer_part |> optional(fractional_part) |> concat(exponent_part)
     ])
 
+  @escape ?\\
+  @quote 34 # ?"
+
+  # EscapedCharacter :: one of
+  #   " \ / b f n r t
+  escaped_character =
+    choice([
+      ascii_char([@quote]),
+      ascii_char([?\\]),
+      ascii_char([?/]),
+      ascii_char([?b]) |> replace(?\b),
+      ascii_char([?f]) |> replace(?\f),
+      ascii_char([?n]) |> replace(?\n),
+      ascii_char([?r]) |> replace(?\r),
+      ascii_char([?t]) |> replace(?\t),
+    ])
+
+  # EscapedUnicode ::
+  #   /[0-9A-Fa-f]{4}
+  escaped_unicode =
+    times(ascii_char([?0..?9, ?A..?F, ?a..?f]), 4)
+    |> traverse({:unescape_unicode, []})
+
+  defp unescape_unicode(_rest, content, context, _line, _offset) do
+    code = content |> Enum.reverse
+    value = :httpd_util.hexlist_to_integer(code)
+    binary = :unicode.characters_to_binary([value])
+    {[binary], context}
+  end
+
+  # StringCharacter ::
+  #   SourceCharacter but not " or \ or LineTerminator
+  #   \u EscapedUnicode
+  #   \ EscapedCharacter
+  string_character =
+    choice([
+      ignore(string(~S(\u))) |> concat(escaped_unicode),
+      ignore(ascii_char([@escape])) |> concat(escaped_character),
+      source_character
+    ])
+
+  # StringValue ::
+  #   ""
+  #   " StringCharacter (list) "
+  string_value =
+    ignore(ascii_char([@quote]))
+    |> repeat_while(string_character, {:not_end_of_quote, []})
+    |> ignore(ascii_char([@quote]))
+
   defp not_line_terminator(<<?\n, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(_, context, _, _), do: {:cont, context}
+
+  defp not_end_of_quote(<<@quote, _::binary>>, context, _, _) do
+    {:halt, context}
+  end
+  defp not_end_of_quote(rest, context, current_line, current_offset) do
+    not_line_terminator(rest, context, current_line, current_offset)
+  end
 
   def parse(input, opts \\ []) do
     __entry__(input, opts)
   end
 
-  defparsec :__entry__, float_value
+  defparsec :__escaped_character__, escaped_character
+  defparsec :__escaped_unicode__, escaped_unicode
+  defparsec :__string_character__, string_character
+  defparsec :__string_value__, string_value
+  defparsec :__entry__, string_value
+  defparsec :__test__, escaped_character
 
 end
