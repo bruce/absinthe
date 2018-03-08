@@ -56,6 +56,19 @@ defmodule Absinthe.Parser do
   comment =
     ignore(string("#"))
     |> repeat_while(source_character, {:not_line_terminator, []})
+    |> traverse({:tagged_string, [:comment]})
+
+  defparsec :__comment__, comment
+
+  defp not_line_terminator(<<?\n, _::binary>>, context, _, _), do: {:halt, context}
+  defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
+  defp not_line_terminator(_, context, _, _), do: {:cont, context}
+
+  defp tagged_string(_rest, chars, context, _, _, tag) do
+    string = chars |> Enum.reverse |> List.to_string
+    {[{tag, string}], context}
+  end
+
 
   # Comma ::
   #   ,
@@ -89,12 +102,38 @@ defmodule Absinthe.Parser do
       ascii_char([?!, ?$, ?(, ?), ?:, ?=, ?@, ?[, ?], ?{, ?|, ?}]),
       string("...")
     ])
+    |> traverse({:lookup_punctuator, []})
+
+  @punctuators %{
+    ?! => :exclamation,
+    ?$ => :dollar,
+    ?( => :left_paren,
+    ?) => :right_paren,
+    ?: => :colon,
+    ?= => :equal,
+    ?@ => :at,
+    ?[ => :left_bracket,
+    ?] => :right_bracket,
+    ?{ => :left_brace,
+    ?} => :right_brace,
+    ?| => :pipe,
+    "..." => :ellipsis,
+  }
+
+  defp lookup_punctuator(_rest, [punct], context, _, _) do
+    {[punctuator: Map.fetch!(@punctuators, punct)], context}
+  end
+
+  defparsec :__punctuator__, punctuator
 
   # Name ::
   #   /[_A-Za-z][_0-9A-Za-z]*/
   name =
     ascii_char([?_..?_, ?A..?Z, ?a..?z])
     |> times(ascii_char([?0..?9, ?_..?_, ?A..?Z, ?a..?z]), min: 1)
+    |> traverse({:tagged_string, [:name]})
+
+  defparsec :__name__, name
 
   # NegativeSign ::
   #   -
@@ -139,13 +178,19 @@ defmodule Absinthe.Parser do
   # IntegerPart ::
   #   NegativeSign (opt) 0
   #   NegativeSign (opt) NonZeroDigit Digit (list, opt)
-  integer_part =
-    choice([
-      optional(negative_sign) |> ascii_char([?0]),
-      optional(negative_sign) |> concat(non_zero_digit) |> repeat(digit)
-    ])
   int_value =
-    integer_part
+    optional(ascii_char([?-]))
+    |> integer(min: 1)
+    |> traverse({:sign_int_value, []})
+
+  defp sign_int_value(_rest, [int, _neg], context, _, _) do
+    {[int_value: int * -1], context}
+  end
+  defp sign_int_value(_rest, [int], context, _, _) do
+    {[int_value: int], context}
+  end
+
+  defparsec :__int_value__, int_value
 
   # FloatValue ::
   #   IntegerPart FractionalPart
@@ -153,9 +198,12 @@ defmodule Absinthe.Parser do
   #   IntegerPart FractionalPart ExponentPart
   float_value =
     choice([
-      integer_part |> concat(fractional_part),
-      integer_part |> optional(fractional_part) |> concat(exponent_part)
+      integer(min: 1) |> concat(fractional_part),
+      integer(min: 1) |> optional(fractional_part) |> concat(exponent_part)
     ])
+    |> tag(:float_value)
+
+  defparsec :__float_value__, float_value
 
   @escape ?\\
   @quote 34 # ?"
@@ -205,10 +253,9 @@ defmodule Absinthe.Parser do
     ignore(ascii_char([@quote]))
     |> repeat_while(string_character, {:not_end_of_quote, []})
     |> ignore(ascii_char([@quote]))
+    |> traverse({:tagged_string, [:string_value]})
 
-  defp not_line_terminator(<<?\n, _::binary>>, context, _, _), do: {:halt, context}
-  defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
-  defp not_line_terminator(_, context, _, _), do: {:cont, context}
+  defparsec :__string_value__, string_value
 
   defp not_end_of_quote(<<@quote, _::binary>>, context, _, _) do
     {:halt, context}
@@ -217,16 +264,27 @@ defmodule Absinthe.Parser do
     not_line_terminator(rest, context, current_line, current_offset)
   end
 
+  # Token ::
+  #   Punctuator
+  #   Name
+  #   IntValue
+  #   FloatValue
+  #   StringValue
+  token =
+    choice([
+      punctuator,
+      name,
+      int_value,
+      float_value,
+      string_value
+    ])
+
+  defparsec :__token__, token
+
   def parse(input, opts \\ []) do
     __entry__(input, opts)
   end
 
-  defparsec :__comment__, comment
-  defparsec :__escaped_character__, escaped_character
-  defparsec :__escaped_unicode__, escaped_unicode
-  defparsec :__string_character__, string_character
-  defparsec :__string_value__, string_value
-  defparsec :__entry__, string_value
-  defparsec :__test__, escaped_character
+  defparsec :__entry__, token
 
 end

@@ -57,7 +57,7 @@ defmodule Absinthe.Mixfile do
       {:decimal, "~> 1.0", optional: true},
       {:phoenix_pubsub, ">= 0.0.0", only: :test},
       {:mix_test_watch, "~> 0.4.1", only: [:test, :dev]},
-      {:nimble_parsec, "~> 0.2"},
+      {:nimble_parsec, github: "plataformatec/nimble_parsec", runtime: false},
     ]
   end
 
