@@ -30,9 +30,24 @@ defmodule Absinthe.ParserTest do
 
   end
 
+  @floats %{
+    "1.0" => 1.0,
+    "-1.0" => -1.0,
+    "12.0" => 12.0,
+    "1.2e3" => 1.2e3,
+    "-1.2e3" => -1.2e3,
+    "-1.2e+3" => -1.2e3,
+    "-1.2e-3" => -1.2e-3,
+    "1e3" => 1.0e3,
+    "-1e3" => -1.0e3,
+    "1e-3" => 1.0e-3,
+    "-1e-3" => -1.0e-3,
+  }
   describe "float_value" do
     test "works" do
-      assert {:ok, [-1.02], "", _, _, _} = Absinthe.Parser.__float_value__(~S(-1.02))
+      for {raw, success} <- @floats do
+        assert {:ok, [^success], "", _, _, _} = Absinthe.Parser.__float_value__(raw)
+      end
     end
   end
 
