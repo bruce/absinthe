@@ -200,10 +200,6 @@ defmodule Absinthe.Parser do
 
   defparsec :__int_value__, int_value
 
-  defparsec :__exponent_part__, exponent_part
-  defparsec :__fractional_part__, fractional_part
-  defparsec :__integer_part__, integer_part
-
   # FloatValue ::
   #   IntegerPart FractionalPart
   #   IntegerPart ExponentPart
@@ -216,9 +212,9 @@ defmodule Absinthe.Parser do
     ])
     |> traverse({:build_float_value, []})
 
-  defp fill_mantissa(_rest, raw, context, _, _) do
-    {[?0, ?.] ++ raw, context}
-  end
+  # GraphQL allows notation like `1e3` as shorthand for `1.0e3`.
+  # This normalizes by adding in the `.0`.
+  defp fill_mantissa(_rest, raw, context, _, _), do: {'0.' ++ raw, context}
 
   defp build_float_value(_rest, value, context, _line, _offset) do
     value =
