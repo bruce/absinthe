@@ -56,7 +56,7 @@ defmodule Absinthe.Parser do
   comment =
     ignore(string("#"))
     |> repeat_while(source_character, {:not_line_terminator, []})
-    |> traverse({:string_token, [:comment]})
+    |> traverse({:build_string, []})
 
   defparsec :__comment__, comment
 
@@ -64,9 +64,9 @@ defmodule Absinthe.Parser do
   defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(_, context, _, _), do: {:cont, context}
 
-  defp string_token(_rest, chars, context, _, _, tag) do
+  defp build_string(_rest, chars, context, _, _) do
     string = chars |> Enum.reverse |> List.to_string
-    {[{tag, string}], context}
+    {[string], context}
   end
 
   # Comma ::
@@ -101,7 +101,7 @@ defmodule Absinthe.Parser do
       ascii_char([?!, ?$, ?(, ?), ?:, ?=, ?@, ?[, ?], ?{, ?|, ?}]),
       string("...")
     ])
-    |> traverse({:punctuator_token, []})
+    |> traverse({:build_punctuator, []})
 
   @punctuators %{
     ?! => :exclamation,
@@ -119,8 +119,8 @@ defmodule Absinthe.Parser do
     "..." => :ellipsis,
   }
 
-  defp punctuator_token(_rest, [punct], context, _, _) do
-    {[punctuator: Map.fetch!(@punctuators, punct)], context}
+  defp build_punctuator(_rest, [punct], context, _, _) do
+    {[Map.fetch!(@punctuators, punct)], context}
   end
 
   defparsec :__punctuator__, punctuator
@@ -130,7 +130,7 @@ defmodule Absinthe.Parser do
   name =
     ascii_char([?_..?_, ?A..?Z, ?a..?z])
     |> times(ascii_char([?0..?9, ?_..?_, ?A..?Z, ?a..?z]), min: 1)
-    |> traverse({:string_token, [:name]})
+    |> traverse({:build_string, []})
 
   defparsec :__name__, name
 
@@ -172,24 +172,37 @@ defmodule Absinthe.Parser do
     |> optional(sign)
     |> times(digit, min: 1)
 
-  # IntValue ::
-  #   IntegerPart
   # IntegerPart ::
   #   NegativeSign (opt) 0
   #   NegativeSign (opt) NonZeroDigit Digit (list, opt)
-  int_value =
+  integer_part =
     optional(ascii_char([?-]))
-    |> integer(min: 1)
-    |> traverse({:int_value_token, []})
+    |> choice([
+      ascii_char([?0]),
+      non_zero_digit |> repeat(digit)
+    ])
 
-  defp int_value_token(_rest, [int, _neg], context, _, _) do
-    {[int_value: int * -1], context}
+  int_value =
+    empty()
+    |> concat(integer_part)
+    |> traverse({:build_int_value, []})
+
+  defp build_int_value(rest, value, context, line, offset) do
+    do_build_int_value(rest, Enum.reverse(value), context, line, offset)
   end
-  defp int_value_token(_rest, [int], context, _, _) do
-    {[int_value: int], context}
+
+  defp do_build_int_value(_rest, [?- | digits], context, _, _) do
+    {[List.to_integer(digits) * -1], context}
+  end
+  defp do_build_int_value(_rest, digits, context, _, _) do
+    {[List.to_integer(digits)], context}
   end
 
   defparsec :__int_value__, int_value
+
+  defparsec :__exponent_part__, exponent_part
+  defparsec :__fractional_part__, fractional_part
+  defparsec :__integer_part__, integer_part
 
   # FloatValue ::
   #   IntegerPart FractionalPart
@@ -197,10 +210,23 @@ defmodule Absinthe.Parser do
   #   IntegerPart FractionalPart ExponentPart
   float_value =
     choice([
-      integer(min: 1) |> concat(fractional_part),
-      integer(min: 1) |> optional(fractional_part) |> concat(exponent_part)
+      integer_part |> concat(fractional_part) |> concat(exponent_part),
+      integer_part |> traverse({:fill_mantissa, []}) |> concat(exponent_part),
+      integer_part |> concat(fractional_part)
     ])
-    |> tag(:float_value)
+    |> traverse({:build_float_value, []})
+
+  defp fill_mantissa(_rest, raw, context, _, _) do
+    {[?0, ?.] ++ raw, context}
+  end
+
+  defp build_float_value(_rest, value, context, _line, _offset) do
+    value =
+      value
+      |> Enum.reverse
+      |> List.to_float
+    {[value], context}
+  end
 
   defparsec :__float_value__, float_value
 
@@ -252,7 +278,7 @@ defmodule Absinthe.Parser do
     ignore(ascii_char([@quote]))
     |> repeat_while(string_character, {:not_end_of_quote, []})
     |> ignore(ascii_char([@quote]))
-    |> traverse({:string_token, [:string_value]})
+    |> traverse({:build_string, []})
 
   defparsec :__string_value__, string_value
 
