@@ -117,6 +117,49 @@ defmodule Absinthe.ParserTest do
               }} = Absinthe.Parser.parse("{foo}")
     end
 
+    test "returns a document with a fragment spread" do
+      assert {:ok,
+              %Absinthe.Blueprint{
+                operations: [
+                  %Absinthe.Blueprint.Document.Operation{
+                    name: nil,
+                    type: :query,
+                    selections: [%Absinthe.Blueprint.Document.Fragment.Spread{name: "foo"}]
+                  }
+                ]
+              }} = Absinthe.Parser.parse("{... foo}")
+    end
+
+    test "returns a document with a fragment spread and field in different orders" do
+      assert {:ok,
+              %Absinthe.Blueprint{
+                operations: [
+                  %Absinthe.Blueprint.Document.Operation{
+                    name: nil,
+                    type: :query,
+                    selections: [
+                      %Absinthe.Blueprint.Document.Fragment.Spread{name: "foo"},
+                      %Absinthe.Blueprint.Document.Field{name: "bar"}
+                    ]
+                  }
+                ]
+              }} = Absinthe.Parser.parse("{... foo bar}")
+
+      assert {:ok,
+              %Absinthe.Blueprint{
+                operations: [
+                  %Absinthe.Blueprint.Document.Operation{
+                    name: nil,
+                    type: :query,
+                    selections: [
+                      %Absinthe.Blueprint.Document.Field{name: "bar"},
+                      %Absinthe.Blueprint.Document.Fragment.Spread{name: "foo"}
+                    ]
+                  }
+                ]
+              }} = Absinthe.Parser.parse("{bar ... foo}")
+    end
+
     test "returns a document for a multiple fields" do
       assert {:ok,
               %Absinthe.Blueprint{

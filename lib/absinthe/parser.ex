@@ -334,10 +334,41 @@ defmodule Absinthe.Parser do
     |> ignore(ascii_char([?:]))
     |> concat(skip_ignored)
 
+  # FragmentName ::
+  #   Name but not on
+  fragment_name =
+    empty()
+    |> concat(skip_ignored)
+    |> concat(name)
+    |> concat(skip_ignored)
+    |> traverse({:check_fragment_name, []})
+
+  defp check_fragment_name(_rest, ["on"], context, _, _) do
+    {:error, ~S(Fragment name cannot be "on")}
+  end
+
+  defp check_fragment_name(_rest, values, context, _, _) do
+    {values, context}
+  end
+
   # FragmentSpread ::
   #   ... FragmentName Directives (opt)
+  fragment_spread =
+    empty()
+    |> concat(skip_ignored)
+    |> string("...")
+    |> concat(fragment_name |> tag(:name))
+    |> concat(skip_ignored)
+    |> traverse({:build_fragment_spread, []})
 
-  # Argument ::
+  defp build_fragment_spread(_rest, values, context, _, _) do
+    {
+      [%Absinthe.Blueprint.Document.Fragment.Spread{name: tag_value(values, :name)}],
+      context
+    }
+  end
+
+  # Argument n::
   #   Name : Value
   # argument =
   #   skip_ignored
@@ -389,7 +420,7 @@ defmodule Absinthe.Parser do
   # TODO: choice
   selection =
     empty()
-    |> times(field, min: 1)
+    |> times(choice([field, fragment_spread]), min: 1)
     |> concat(skip_ignored)
 
   # SelectionSet ::
