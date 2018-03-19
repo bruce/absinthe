@@ -26,8 +26,7 @@ defmodule Absinthe.Parser do
 
   # UnicodeBOM ::
   #   Byte Order Mark (U+FEFF)
-  unicode_bom =
-    utf8_char([@unicode_bom])
+  unicode_bom = utf8_char([@unicode_bom])
 
   # WhiteSpace ::
   #   Horizontal Tab (U+0009)
@@ -35,7 +34,7 @@ defmodule Absinthe.Parser do
   whitespace =
     utf8_char([
       @horizontal_tab,
-      @space,
+      @space
     ])
 
   # LineTerminator ::
@@ -58,21 +57,20 @@ defmodule Absinthe.Parser do
     |> repeat_while(source_character, {:not_line_terminator, []})
     |> traverse({:build_string, []})
 
-  defparsec :__comment__, comment
+  defparsec(:__comment__, comment)
 
   defp not_line_terminator(<<?\n, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(<<?\r, _::binary>>, context, _, _), do: {:halt, context}
   defp not_line_terminator(_, context, _, _), do: {:cont, context}
 
   defp build_string(_rest, chars, context, _, _) do
-    string = chars |> Enum.reverse |> List.to_string
+    string = chars |> Enum.reverse() |> List.to_string()
     {[string], context}
   end
 
   # Comma ::
   #   ,
-  comma =
-    string(",")
+  comma = string(",")
 
   # Ignored ::
   #   UnicodeBOM
@@ -120,14 +118,14 @@ defmodule Absinthe.Parser do
     ?{ => :left_brace,
     ?} => :right_brace,
     ?| => :pipe,
-    "..." => :ellipsis,
+    "..." => :ellipsis
   }
 
   defp build_punctuator(_rest, [punct], context, _, _) do
     {[Map.fetch!(@punctuators, punct)], context}
   end
 
-  defparsec :__punctuator__, punctuator
+  defparsec(:__punctuator__, punctuator)
 
   # Name ::
   #   /[_A-Za-z][_0-9A-Za-z]*/
@@ -139,22 +137,19 @@ defmodule Absinthe.Parser do
     |> concat(skip_ignored)
     |> traverse({:build_string, []})
 
-  defparsec :__name__, name
+  defparsec(:__name__, name)
 
   # NegativeSign ::
   #   -
-  negative_sign =
-    ascii_char([?-])
+  negative_sign = ascii_char([?-])
 
   # Digit :: one of
   #   0 1 2 3 4 5 6 7 8 9
-  digit =
-    ascii_char([?0..?9])
+  digit = ascii_char([?0..?9])
 
   # NonZeroDigit ::
   #   Digit but not 0
-  non_zero_digit =
-    ascii_char([?1..?9])
+  non_zero_digit = ascii_char([?1..?9])
 
   # FractionalPart ::
   #   . Digit (list)
@@ -164,13 +159,11 @@ defmodule Absinthe.Parser do
 
   # ExponentIndicator :: one of
   #   e E
-  exponent_indicator =
-    ascii_char([?e, ?E])
+  exponent_indicator = ascii_char([?e, ?E])
 
   # Sign :: one of
   #   + -
-  sign =
-    ascii_char([?+, ?-])
+  sign = ascii_char([?+, ?-])
 
   # ExponentPart ::
   #   ExponentIndicator Sign (opt) Digit (list)
@@ -201,11 +194,12 @@ defmodule Absinthe.Parser do
   defp do_build_int_value(_rest, [?- | digits], context, _, _) do
     {[List.to_integer(digits) * -1], context}
   end
+
   defp do_build_int_value(_rest, digits, context, _, _) do
     {[List.to_integer(digits)], context}
   end
 
-  defparsec :__int_value__, int_value
+  defparsec(:__int_value__, int_value)
 
   # FloatValue ::
   #   IntegerPart FractionalPart
@@ -226,15 +220,17 @@ defmodule Absinthe.Parser do
   defp build_float_value(_rest, value, context, _line, _offset) do
     value =
       value
-      |> Enum.reverse
-      |> List.to_float
+      |> Enum.reverse()
+      |> List.to_float()
+
     {[value], context}
   end
 
-  defparsec :__float_value__, float_value
+  defparsec(:__float_value__, float_value)
 
   @escape ?\\
-  @quote 34 # ?"
+  # ?"
+  @quote 34
 
   # EscapedCharacter :: one of
   #   " \ / b f n r t
@@ -247,7 +243,7 @@ defmodule Absinthe.Parser do
       ascii_char([?f]) |> replace(?\f),
       ascii_char([?n]) |> replace(?\n),
       ascii_char([?r]) |> replace(?\r),
-      ascii_char([?t]) |> replace(?\t),
+      ascii_char([?t]) |> replace(?\t)
     ])
 
   # EscapedUnicode ::
@@ -257,7 +253,7 @@ defmodule Absinthe.Parser do
     |> traverse({:unescape_unicode, []})
 
   defp unescape_unicode(_rest, content, context, _line, _offset) do
-    code = content |> Enum.reverse
+    code = content |> Enum.reverse()
     value = :httpd_util.hexlist_to_integer(code)
     binary = :unicode.characters_to_binary([value])
     {[binary], context}
@@ -283,11 +279,12 @@ defmodule Absinthe.Parser do
     |> ignore(ascii_char([@quote]))
     |> traverse({:build_string, []})
 
-  defparsec :__string_value__, string_value
+  defparsec(:__string_value__, string_value)
 
   defp not_end_of_quote(<<@quote, _::binary>>, context, _, _) do
     {:halt, context}
   end
+
   defp not_end_of_quote(rest, context, current_line, current_offset) do
     not_line_terminator(rest, context, current_line, current_offset)
   end
@@ -307,7 +304,7 @@ defmodule Absinthe.Parser do
       string_value
     ])
 
-  defparsec :__token__, token
+  defparsec(:__token__, token)
 
   #
   # Query Document
@@ -378,7 +375,7 @@ defmodule Absinthe.Parser do
       [
         %Absinthe.Blueprint.Document.Field{
           name: tag_value(values, :name),
-          alias: tag_value(values, :alias),
+          alias: tag_value(values, :alias)
         }
       ],
       context
@@ -389,9 +386,10 @@ defmodule Absinthe.Parser do
   #   Field
   #   FragmentSpread
   #   InlineFragment
+  # TODO: choice
   selection =
     empty()
-    |> times(field, min: 1) # TODO: choice
+    |> times(field, min: 1)
     |> concat(skip_ignored)
 
   # SelectionSet ::
@@ -413,7 +411,8 @@ defmodule Absinthe.Parser do
       # Bare
       selection_set |> tag(:selections),
       # Normal
-      (operation_type |> tag(:operation_type))
+      operation_type
+      |> tag(:operation_type)
       |> optional(name |> tag(:name))
       |> concat(selection_set |> tag(:selections))
     ])
@@ -443,9 +442,10 @@ defmodule Absinthe.Parser do
   # Definition ::
   #   ExecutableDefinition
   #   TypeSystemDefinition
+  # TODO: Expand
   definition =
     empty()
-    |> concat(executable_definition) # TODO: Expand
+    |> concat(executable_definition)
 
   # Document ::
   #   Definition (list)
@@ -459,6 +459,7 @@ defmodule Absinthe.Parser do
   defp build_blueprint("", definitions, context, _, _) do
     {[do_build_blueprint(definitions)], context}
   end
+
   defp build_blueprint(_rest, _value, _context, _, _) do
     {:error, "Parse error"}
   end
@@ -467,12 +468,13 @@ defmodule Absinthe.Parser do
     Enum.reduce(definitions, %Absinthe.Blueprint{}, fn
       %Absinthe.Blueprint.Document.Operation{} = defn, acc ->
         %{acc | operations: [defn | acc.operations]}
+
       %Absinthe.Blueprint.Document.Fragment.Named{} = defn, acc ->
         %{acc | fragments: [defn | acc.fragments]}
     end)
   end
 
-  defparsec :__document__, document
+  defparsec(:__document__, document)
 
   def parse(input) do
     case __document__(input) do
@@ -485,6 +487,7 @@ defmodule Absinthe.Parser do
     case values[key] do
       nil ->
         default
+
       [value] ->
         value
     end
@@ -494,9 +497,9 @@ defmodule Absinthe.Parser do
     case values[key] do
       nil ->
         []
+
       list ->
         list
     end
   end
-
 end
