@@ -130,6 +130,10 @@ defmodule Absinthe.ParserTest do
               }} = Absinthe.Parser.parse("{... foo}")
     end
 
+    test "can't name a fragment spread 'on'" do
+      assert {:error, "Invalid fragment name 'on'"} = Absinthe.Parser.parse("{... on}")
+    end
+
     test "returns a document with a fragment spread and field in different orders" do
       assert {:ok,
               %Absinthe.Blueprint{

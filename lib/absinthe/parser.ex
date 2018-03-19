@@ -343,8 +343,8 @@ defmodule Absinthe.Parser do
     |> concat(skip_ignored)
     |> traverse({:check_fragment_name, []})
 
-  defp check_fragment_name(_rest, ["on"], context, _, _) do
-    {:error, ~S(Fragment name cannot be "on")}
+  defp check_fragment_name(_rest, ["on"], _context, _line, _offset) do
+    {:error, ~S(Invalid fragment name 'on')}
   end
 
   defp check_fragment_name(_rest, values, context, _, _) do
@@ -511,6 +511,9 @@ defmodule Absinthe.Parser do
     case __document__(input) do
       {:ok, [doc], "", _, _, _} ->
         {:ok, doc}
+
+      {:error, err, _, _, _, _} ->
+        {:error, err}
     end
   end
 
