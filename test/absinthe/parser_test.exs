@@ -93,4 +93,17 @@ defmodule Absinthe.ParserTest do
       assert {:ok, [:ellipsis], "", _, _, _} = Absinthe.Parser.__punctuator__(~S(...))
     end
   end
+
+  describe ".parse" do
+    test "returns a document for a single field" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}]}]}} = Absinthe.Parser.parse("{foo}")
+    end
+    test "returns a document for a multiple fields" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}, %Absinthe.Blueprint.Document.Field{name: "bar"}]}]}} = Absinthe.Parser.parse("{foo bar}")
+    end
+    test "returns a document for a single field with an alias" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo", alias: "mine"}]}]}} = Absinthe.Parser.parse("{mine: foo}")
+    end
+    # TODO: using operation type
+  end
 end

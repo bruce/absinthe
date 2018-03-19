@@ -89,6 +89,10 @@ defmodule Absinthe.Parser do
       comma
     ])
 
+  skip_ignored =
+    empty()
+    |> repeat(ignore(ignored))
+
   #
   # Lexical Tokens
   # Reference: http://facebook.github.io/graphql/October2016/#sec-Appendix-Grammar-Summary.Lexical-Tokens
@@ -302,10 +306,165 @@ defmodule Absinthe.Parser do
 
   defparsec :__token__, token
 
-  def parse(input, opts \\ []) do
-    __entry__(input, opts)
+  #
+  # Query Document
+  # Reference: http://facebook.github.io/graphql/October2016/#sec-Appendix-Grammar-Summary.Query-Document
+  #
+
+  # OperationType :: one of
+  #   query mutation
+  #
+  # Note: We also support 'subscription'
+  operation_type =
+    skip_ignored
+    |> choice([
+      string("query"),
+      string("mutation"),
+      string("subscription")
+    ])
+    |> concat(skip_ignored)
+
+  # Alias ::
+  #   Name
+  alias =
+    skip_ignored
+    |> concat(name)
+    |> concat(skip_ignored)
+    |> ignore(ascii_char([?:]))
+    |> concat(skip_ignored)
+
+  # FragmentSpread ::
+  #   ... FragmentName Directives (opt)
+
+  # Argument ::
+  #   Name : Value
+  # argument =
+  #   skip_ignored
+  #   |> concat(name)
+  #   |> concat(skip_ignored)
+  #   |> ascii_char([?:])
+  #   |> concat(skip_ignored)
+  #   |> concat(value)
+  #   |> concat(skip_ignored),
+
+  # Arguments ::
+  #   ( Argument (list) )
+  # arguments =
+  #   |> concat(skip_ignored)
+  #   |> ignore(ascii_char([?(]))
+  #   |> concat(skip_ignored)
+  #   |> repeat(argument)
+  #   |> concat(skip_ignored)
+  #   |> ignore(ascii_char([?)])
+  #   |> concat(skip_ignored)
+
+  # Field ::
+  #   Alias (opt) Name Arguments (opt) Directives (opt) SelectionSet (opt)
+  field =
+    empty()
+    |> concat(skip_ignored)
+    |> optional(alias |> tag(:alias))
+    |> concat(skip_ignored)
+    |> concat(name |> tag(:name))
+    |> concat(skip_ignored)
+    |> traverse({:build_node, [Absinthe.Blueprint.Document.Field, [:name, :alias]]})
+
+  # Selection ::
+  #   Field
+  #   FragmentSpread
+  #   InlineFragment
+  selection =
+    empty()
+    |> times(field, min: 1) # TODO: choice
+    |> concat(skip_ignored)
+
+  # SelectionSet ::
+  #   { Selection (list) }
+  selection_set =
+    ignore(ascii_char([?{]))
+    |> concat(skip_ignored)
+    |> times(selection, min: 1)
+    |> concat(skip_ignored)
+    |> ignore(ascii_char([?}]))
+    |> concat(skip_ignored)
+
+  # OperationDefinition ::
+  #   SelectionSet
+  #   OperationType Name (opt) VariableDefinitions (opt) Directives (opt) SelectionSet
+  operation_definition =
+    skip_ignored
+    |> choice([
+      selection_set,
+      operation_type |> concat(selection_set)
+    ])
+    |> concat(skip_ignored)
+    |> traverse({:build_operation_definition, []})
+
+  defp build_operation_definition(_rest, selection_set, context, _, _) do
+    value = %Absinthe.Blueprint.Document.Operation{type: :query, name: nil, selections: Enum.reverse(selection_set)}
+    {[value], context}
+  end
+  defp build_operation_definition(_rest, [selection_set, operation_type], context, _, _) do
+    value = %Absinthe.Blueprint.Document.Operation{type: operation_type, name: nil, selections: selection_set}
+    {[value], context}
   end
 
-  defparsec :__entry__, token
+  # ExecutableDefinition ::
+  #  OperationDefinition
+  #  FragmentDefinition
+  executable_definition =
+    empty()
+    |> concat(operation_definition)
+
+  # Definition ::
+  #   ExecutableDefinition
+  #   TypeSystemDefinition
+  definition =
+    empty()
+    |> concat(executable_definition) # TODO: Expand
+
+  # Document ::
+  #   Definition (list)
+  document =
+    empty()
+    |> concat(skip_ignored)
+    |> repeat(definition)
+    |> concat(skip_ignored)
+    |> traverse({:build_blueprint, []})
+
+  defp build_blueprint("", definitions, context, _, _) do
+    {[do_build_blueprint(definitions)], context}
+  end
+  defp build_blueprint(_rest, _value, _context, _, _) do
+    {:error, "Parse error"}
+  end
+
+  defp do_build_blueprint(definitions) do
+    Enum.reduce(definitions, %Absinthe.Blueprint{}, fn
+      %Absinthe.Blueprint.Document.Operation{} = defn, acc ->
+        %{acc | operations: [defn | acc.operations]}
+      %Absinthe.Blueprint.Document.Fragment.Named{} = defn, acc ->
+        %{acc | fragments: [defn | acc.fragments]}
+    end)
+  end
+
+  defparsec :__document__, document
+
+  def parse(input) do
+    case __document__(input) do
+      {:ok, [doc], "", _, _, _} ->
+        {:ok, doc}
+    end
+  end
+
+  defp build_node(_rest, values, context, _, _, node, singles) do
+    values = for {key, val} <- values do
+      case {key in singles, val} do
+        {true, [single]} -> {key, single}
+        {false, _} -> val
+      end
+    end
+    {[struct(node, values)], context}
+  end
 
 end
