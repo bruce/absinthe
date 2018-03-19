@@ -104,6 +104,18 @@ defmodule Absinthe.ParserTest do
     test "returns a document for a single field with an alias" do
       assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo", alias: "mine"}]}]}} = Absinthe.Parser.parse("{mine: foo}")
     end
-    # TODO: using operation type
+    test "returns a document with a query operation" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}]}]}} = Absinthe.Parser.parse("query { foo }")
+    end
+    test "returns a document with a mutation operation" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :mutation, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}]}]}} = Absinthe.Parser.parse("mutation { foo }")
+    end
+    test "returns a document with a subscription operation" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: nil, type: :subscription, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}]}]}} = Absinthe.Parser.parse("subscription { foo }")
+    end
+    test "returns a document with a named operation" do
+      assert {:ok, %Absinthe.Blueprint{operations: [%Absinthe.Blueprint.Document.Operation{name: "MyQuery", type: :query, selections: [%Absinthe.Blueprint.Document.Field{name: "foo"}]}]}} = Absinthe.Parser.parse("query MyQuery { foo }")
+    end
+
   end
 end

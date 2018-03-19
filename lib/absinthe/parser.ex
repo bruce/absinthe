@@ -82,7 +82,7 @@ defmodule Absinthe.Parser do
   #   Comma
   ignored =
     choice([
-      utf8_char([@unicode_bom]),
+      unicode_bom,
       whitespace,
       line_terminator,
       comment,
@@ -132,8 +132,11 @@ defmodule Absinthe.Parser do
   # Name ::
   #   /[_A-Za-z][_0-9A-Za-z]*/
   name =
-    ascii_char([?_..?_, ?A..?Z, ?a..?z])
+    empty()
+    |> concat(skip_ignored)
+    |> ascii_char([?_..?_, ?A..?Z, ?a..?z])
     |> times(ascii_char([?0..?9, ?_..?_, ?A..?Z, ?a..?z]), min: 1)
+    |> concat(skip_ignored)
     |> traverse({:build_string, []})
 
   defparsec :__name__, name
@@ -180,7 +183,7 @@ defmodule Absinthe.Parser do
   #   NegativeSign (opt) 0
   #   NegativeSign (opt) NonZeroDigit Digit (list, opt)
   integer_part =
-    optional(ascii_char([?-]))
+    optional(negative_sign)
     |> choice([
       ascii_char([?0]),
       non_zero_digit |> repeat(digit)
@@ -323,6 +326,7 @@ defmodule Absinthe.Parser do
       string("subscription")
     ])
     |> concat(skip_ignored)
+    |> map({String, :to_atom, []})
 
   # Alias ::
   #   Name
@@ -367,7 +371,19 @@ defmodule Absinthe.Parser do
     |> concat(skip_ignored)
     |> concat(name |> tag(:name))
     |> concat(skip_ignored)
-    |> traverse({:build_node, [Absinthe.Blueprint.Document.Field, [:name, :alias]]})
+    |> traverse({:build_field, []})
+
+  defp build_field(_rest, values, context, _, _) do
+    {
+      [
+        %Absinthe.Blueprint.Document.Field{
+          name: tag_value(values, :name),
+          alias: tag_value(values, :alias),
+        }
+      ],
+      context
+    }
+  end
 
   # Selection ::
   #   Field
@@ -394,19 +410,27 @@ defmodule Absinthe.Parser do
   operation_definition =
     skip_ignored
     |> choice([
-      selection_set,
-      operation_type |> concat(selection_set)
+      # Bare
+      selection_set |> tag(:selections),
+      # Normal
+      (operation_type |> tag(:operation_type))
+      |> optional(name |> tag(:name))
+      |> concat(selection_set |> tag(:selections))
     ])
     |> concat(skip_ignored)
-    |> traverse({:build_operation_definition, []})
+    |> traverse({:build_operation, []})
 
-  defp build_operation_definition(_rest, selection_set, context, _, _) do
-    value = %Absinthe.Blueprint.Document.Operation{type: :query, name: nil, selections: Enum.reverse(selection_set)}
-    {[value], context}
-  end
-  defp build_operation_definition(_rest, [selection_set, operation_type], context, _, _) do
-    value = %Absinthe.Blueprint.Document.Operation{type: operation_type, name: nil, selections: selection_set}
-    {[value], context}
+  defp build_operation(_rest, values, context, _, _) do
+    {
+      [
+        %Absinthe.Blueprint.Document.Operation{
+          name: tag_value(values, :name),
+          type: tag_value(values, :operation_type, :query),
+          selections: tag_value_list(values, :selections)
+        }
+      ],
+      context
+    }
   end
 
   # ExecutableDefinition ::
@@ -457,14 +481,22 @@ defmodule Absinthe.Parser do
     end
   end
 
-  defp build_node(_rest, values, context, _, _, node, singles) do
-    values = for {key, val} <- values do
-      case {key in singles, val} do
-        {true, [single]} -> {key, single}
-        {false, _} -> val
-      end
+  defp tag_value(values, key, default \\ nil) do
+    case values[key] do
+      nil ->
+        default
+      [value] ->
+        value
     end
-    {[struct(node, values)], context}
+  end
+
+  defp tag_value_list(values, key) do
+    case values[key] do
+      nil ->
+        []
+      list ->
+        list
+    end
   end
 
 end
