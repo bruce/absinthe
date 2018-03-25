@@ -18,6 +18,7 @@ defmodule Absinthe.Parser do
       @space..@unicode_final
     ])
 
+
   # ## Ignored Tokens
 
   # UnicodeBOM :: "Byte Order Mark (U+FEFF)"
@@ -27,7 +28,7 @@ defmodule Absinthe.Parser do
   #   - "Horizontal Tab (U+0009)"
   #   - "Space (U+0020)"
   whitespace =
-    utf8_char([
+    ascii_char([
       @horizontal_tab,
       @space
     ])
@@ -38,9 +39,9 @@ defmodule Absinthe.Parser do
   #   - "Carriage Return (U+000D)" "New Line (U+000A)"
   line_terminator =
     choice([
-      utf8_char([@newline]),
-      utf8_char([@carriage_return])
-      |> optional(utf8_char([@newline]))
+      ascii_char([@newline]),
+      ascii_char([@carriage_return])
+      |> optional(ascii_char([@newline]))
     ])
 
   # Comment :: `#` CommentChar*
@@ -230,18 +231,18 @@ defmodule Absinthe.Parser do
 
   # Note: Block string values are interpreted to exclude blank initial and trailing
   # lines and uniform indentation with {BlockStringValue()}.
-  block_string_character =
+  _block_string_character =
     string("BLOCK_STRING_STUB")
 
   # StringValue ::
   #   - `"` StringCharacter* `"`
   #   - `"""` BlockStringCharacter* `"""`
+  # TODO: Use block_string_character
   string_value =
     ignore(ascii_char([?"]))
     |> repeat_while(string_character, {:not_end_of_quote, []})
     |> ignore(ascii_char([?"]))
     |> traverse({:build_string, []})
-    # TODO: Block quote
 
   defparsec(:__string_value__, string_value)
 
@@ -251,7 +252,7 @@ defmodule Absinthe.Parser do
 
   defp not_end_of_quote(rest, context, current_line, current_offset) do
     not_line_terminator(rest, context, current_line, current_offset)
-  end    
+  end
 
   # ## Document      
 
@@ -463,7 +464,7 @@ defmodule Absinthe.Parser do
   #   - InlineFragment
   selection =
     empty()
-    |> times(choice([field, fragment_spread]), min: 1)
+    |> times(choice([field, fragment_spread, inline_fragment]), min: 1)
     |> concat(skip_ignored)
 
   # SelectionSet : { Selection+ }
@@ -477,6 +478,24 @@ defmodule Absinthe.Parser do
 
   defparsec :__selection_set__, selection_set
 
+  # DefaultValue : = Value[Const]
+  default_value =
+    ascii_char([?=])
+    |> concat(value)
+
+  # VariableDefinition : Variable : Type DefaultValue?
+  variable_definition =
+    variable
+    |> ascii_char([?:])
+    |> concat(parsec(:__type__))
+    |> optional(default_value)
+
+  # VariableDefinitions : ( VariableDefinition+ )
+  variable_definitions =
+    ascii_char([?(])
+    |> times(variable_definition, min: 1)
+    |> ascii_char([?)])
+
   # OperationDefinition :
   #   - SelectionSet
   #   - OperationType Name? VariableDefinitions? Directives? SelectionSet
@@ -489,11 +508,14 @@ defmodule Absinthe.Parser do
       operation_type
       |> tag(:operation_type)
       |> optional(name |> tag(:name))
+      |> optional(variable_definitions)
+      |> optional(directives)
       |> concat(selection_set |> tag(:selections))
     ])
     |> concat(skip_ignored)
     |> traverse({:build_operation, []})
 
+  # TODO: Use variable definitions, directives
   defp build_operation(_rest, values, context, _, _) do
     {
       [
@@ -516,24 +538,6 @@ defmodule Absinthe.Parser do
       operation_definition,
       fragment_definition
     ])
-
-  # DefaultValue : = Value[Const]
-  default_value =
-    ascii_char([?=])
-    |> concat(value)
-
-  # VariableDefinition : Variable : Type DefaultValue?
-  variable_definition =
-    variable
-    |> ascii_char([?:])
-    |> concat(parsec(:__type__))
-    |> optional(default_value)
-
-  # VariableDefinitions : ( VariableDefinition+ )
-  variable_definitions =
-    ascii_char([?(])
-    |> times(variable_definition, min: 1)
-    |> ascii_char([?)])
 
   # ListType : [ Type ]
   list_type =
