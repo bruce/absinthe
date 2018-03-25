@@ -83,6 +83,8 @@ defmodule Absinthe.Parser do
     empty()
     |> repeat(ignore(ignored))
 
+  defparsec(:__skip_ignored__, skip_ignored)
+
   # ## Lexical Tokens
 
   # Token ::
@@ -99,10 +101,10 @@ defmodule Absinthe.Parser do
   # Name :: /[_A-Za-z][_0-9A-Za-z]*/
   name =
     empty()
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> ascii_char([?_..?_, ?A..?Z, ?a..?z])
     |> times(ascii_char([?0..?9, ?_..?_, ?A..?Z, ?a..?z]), min: 1)
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:build_string, []})
 
   defparsec(:__name__, name)
@@ -254,35 +256,35 @@ defmodule Absinthe.Parser do
     not_line_terminator(rest, context, current_line, current_offset)
   end
 
-  # ## Document      
+  # ## Document
 
   # OperationType : one of query mutation subscription
   operation_type =
-    skip_ignored
+    parsec(:__skip_ignored__)
     |> choice([
       string("query"),
       string("mutation"),
       string("subscription")
     ])
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> map({String, :to_atom, []})
 
   # Alias : Name :
   alias =
-    skip_ignored
-    |> concat(name)
-    |> concat(skip_ignored)
+    parsec(:__skip_ignored__)
+    |> concat(parsec(:__name__))
+    |> concat(parsec(:__skip_ignored__))
     |> ignore(ascii_char([?:]))
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
 
   # Field : Alias? Name Arguments? Directives? SelectionSet?
   field =
     empty()
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> optional(alias |> tag(:alias))
-    |> concat(skip_ignored)
-    |> concat(name |> tag(:name))
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
+    |> concat(parsec(:__name__) |> tag(:name))
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:build_field, []})
 
   defp build_field(_rest, values, context, _, _) do
@@ -300,9 +302,9 @@ defmodule Absinthe.Parser do
   # FragmentName : Name but not `on`
   fragment_name =
     empty()
-    |> concat(skip_ignored)
-    |> concat(name)
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
+    |> concat(parsec(:__name__))
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:check_fragment_name, []})
 
   defp check_fragment_name(_rest, ["on"], _context, _line, _offset) do
@@ -314,12 +316,13 @@ defmodule Absinthe.Parser do
   end
 
   # NamedType : Name
-  named_type = name
+  named_type = parsec(:__name__)
+  defparsec(:__named_type__, named_type)
 
   # TypeCondition : on NamedType
   type_condition =
     string("on")
-    |> concat(named_type)
+    |> concat(parsec(:__named_type__))
 
   # BooleanValue : one of `true` `false`
   boolean_value =
@@ -333,7 +336,7 @@ defmodule Absinthe.Parser do
 
   # EnumValue : Name but not `true`, `false` or `null`
   enum_value =
-    name
+    parsec(:__name__)
     |> lookahead({:error_when_next_is_not_enum_value, []})
 
   for text <- ~w(true false null) do
@@ -356,7 +359,7 @@ defmodule Absinthe.Parser do
 
   # ObjectField[Const] : Name : Value[?Const]
   object_field =
-    name
+    parsec(:__name__)
     |> ascii_char([?:])
     |> concat(parsec(:__value__))
 
@@ -375,7 +378,7 @@ defmodule Absinthe.Parser do
   # Variable : $ Name
   variable =
     ascii_char([?$])
-    |> concat(name)
+    |> concat(parsec(:__name__))
 
   # Value[Const] :
   #   - [~Const] Variable
@@ -404,9 +407,9 @@ defmodule Absinthe.Parser do
 
   # Argument[Const] : Name : Value[?Const]
   argument =
-    name
+    parsec(:__name__)
     |> ascii_char([?:])
-    |> concat(value)
+    |> concat(parsec(:__value__))
 
   # Arguments[Const] : ( Argument[?Const]+ )
   arguments =
@@ -414,37 +417,40 @@ defmodule Absinthe.Parser do
     |> times(argument, min: 1)
     |> ascii_char([?)])
 
+  defparsec(:__arguments__, arguments)
+
   # Directive[Const] : @ Name Arguments[?Const]?
   directive =
     ascii_char([?@])
-    |> concat(name)
-    |> optional(arguments)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__arguments__))
 
   # Directives[Const] : Directive[?Const]+
   directives = times(directive, min: 1)
+  defparsec(:__directives__, directives)
 
   # FragmentDefinition : fragment FragmentName TypeCondition Directives? SelectionSet
   fragment_definition =
     string("fragment")
     |> concat(fragment_name)
     |> concat(type_condition)
-    |> optional(directives)
+    |> optional(parsec(:__directives__))
     |> concat(parsec(:__selection_set__))
 
   # InlineFragment : ... TypeCondition? Directives? SelectionSet
   inline_fragment =
     string("...")
     |> optional(type_condition)
-    |> optional(directives)
+    |> optional(parsec(:__directives__))
     |> concat(parsec(:__selection_set__))
 
   # FragmentSpread : ... FragmentName Directives?
   fragment_spread =
     empty()
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> string("...")
     |> concat(fragment_name |> tag(:name))
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:build_fragment_spread, []})
 
   defp build_fragment_spread(_rest, values, context, _, _) do
@@ -461,30 +467,32 @@ defmodule Absinthe.Parser do
   selection =
     empty()
     |> times(choice([field, fragment_spread, inline_fragment]), min: 1)
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
 
   # SelectionSet : { Selection+ }
   selection_set =
     ignore(ascii_char([?{]))
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> times(selection, min: 1)
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> ignore(ascii_char([?}]))
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
 
   defparsec(:__selection_set__, selection_set)
 
   # DefaultValue : = Value[Const]
   default_value =
     ascii_char([?=])
-    |> concat(value)
+    |> concat(parsec(:__value__))
+
+  defparsec(:__default_value__, default_value)
 
   # VariableDefinition : Variable : Type DefaultValue?
   variable_definition =
     variable
     |> ascii_char([?:])
     |> concat(parsec(:__type__))
-    |> optional(default_value)
+    |> optional(parsec(:__default_value__))
 
   # VariableDefinitions : ( VariableDefinition+ )
   variable_definitions =
@@ -496,19 +504,19 @@ defmodule Absinthe.Parser do
   #   - SelectionSet
   #   - OperationType Name? VariableDefinitions? Directives? SelectionSet
   operation_definition =
-    skip_ignored
+    parsec(:__skip_ignored__)
     |> choice([
       # Bare
       selection_set |> tag(:selections),
       # Normal
       operation_type
       |> tag(:operation_type)
-      |> optional(name |> tag(:name))
+      |> optional(parsec(:__name__) |> tag(:name))
       |> optional(variable_definitions)
-      |> optional(directives)
+      |> optional(parsec(:__directives__))
       |> concat(selection_set |> tag(:selections))
     ])
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:build_operation, []})
 
   # TODO: Use variable definitions, directives
@@ -541,16 +549,20 @@ defmodule Absinthe.Parser do
     |> concat(parsec(:__type__))
     |> ascii_char([?]])
 
+  defparsec(:__list_type__, list_type)
+
   # NonNullType :
   #   - NamedType !
   #   - ListType !
   non_null_type =
     choice([
-      named_type
+      parsec(:__named_type__)
       |> ascii_char([?!]),
-      list_type
+      parsec(:__list_type__)
       |> ascii_char([?!])
     ])
+
+  defparsec(:__non_null_type__, non_null_type)
 
   # Type :
   #   - NamedType
@@ -558,9 +570,9 @@ defmodule Absinthe.Parser do
   #   - NonNullType
   type =
     choice([
-      named_type,
-      list_type,
-      non_null_type
+      parsec(:__named_type__),
+      parsec(:__list_type__),
+      parsec(:__non_null_type__)
     ])
 
   defparsec(:__type__, type)
@@ -569,33 +581,34 @@ defmodule Absinthe.Parser do
   operation_type_definition =
     operation_type
     |> ascii_char([?:])
-    |> concat(named_type)
+    |> concat(parsec(:__named_type__))
 
   # SchemaDefinition : schema Directives[Const]? { OperationTypeDefinition+ }
   schema_definition =
     string("schema")
-    |> optional(directives)
+    |> optional(parsec(:__directives__))
     |> ascii_char([?{])
     |> times(operation_type_definition, min: 1)
     |> ascii_char([?}])
 
   # Description : StringValue
-  description = string_value
+  description = parsec(:__string_value__)
+  defparsec(:__description__, description)
 
   # ScalarTypeDefinition : Description? scalar Name Directives[Const]?
   scalar_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("scalar")
-    |> concat(name)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__directives__))
 
   # ScalarTypeExtension :
   #   - extend scalar Name Directives[Const]
   scalar_type_extension =
     string("extend")
     |> string("scalar")
-    |> concat(name)
-    |> concat(directives)
+    |> concat(parsec(:__name__))
+    |> concat(parsec(:__directives__))
 
   # ImplementsInterfaces :
   #   - implements `&`? NamedType
@@ -604,22 +617,22 @@ defmodule Absinthe.Parser do
     choice([
       string("implements")
       |> optional(ascii_char([?&]))
-      |> concat(named_type),
+      |> concat(parsec(:__named_type__)),
       parsec(:__implements_interfaces__)
       |> ascii_char([?&])
-      |> concat(named_type)
+      |> concat(parsec(:__named_type__))
     ])
 
   defparsec(:__implements_interfaces__, implements_interfaces)
 
   # InputValueDefinition : Description? Name : Type DefaultValue? Directives[Const]?
   input_value_definition =
-    optional(description)
-    |> concat(name)
+    optional(parsec(:__description__))
+    |> concat(parsec(:__name__))
     |> ascii_char([?:])
-    |> concat(type)
-    |> optional(default_value)
-    |> optional(directives)
+    |> concat(parsec(:__type__))
+    |> optional(parsec(:__default_value__))
+    |> optional(parsec(:__directives__))
 
   # ArgumentsDefinition : ( InputValueDefinition+ )
   arguments_definition =
@@ -627,13 +640,16 @@ defmodule Absinthe.Parser do
     |> times(input_value_definition, min: 1)
     |> ascii_char([?)])
 
+  defparsec(:__arguments_definition__, arguments_definition)
+
   # FieldDefinition : Description? Name ArgumentsDefinition? : Type Directives[Const]?
   field_definition =
-    optional(description)
-    |> concat(name)
-    |> optional(arguments_definition)
+    optional(parsec(:__description__))
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__arguments_definition__))
     |> ascii_char([?:])
-    |> optional(directives)
+    |> concat(parsec(:__type__))
+    |> optional(parsec(:__directives__))
 
   # FieldsDefinition : { FieldDefinition+ }
   fields_definition =
@@ -649,36 +665,36 @@ defmodule Absinthe.Parser do
     choice([
       string("extend")
       |> string("type")
-      |> concat(name)
-      |> optional(implements_interfaces)
-      |> optional(directives)
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__implements_interfaces__))
+      |> optional(parsec(:__directives__))
       |> concat(fields_definition),
       string("extend")
       |> string("type")
-      |> concat(name)
-      |> optional(implements_interfaces)
-      |> concat(directives),
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__implements_interfaces__))
+      |> concat(parsec(:__directives__)),
       string("extend")
       |> string("type")
-      |> concat(name)
-      |> concat(implements_interfaces)
+      |> concat(parsec(:__name__))
+      |> concat(parsec(:__implements_interfaces__))
     ])
 
   # ObjectTypeDefinition : Description? type Name ImplementsInterfaces? Directives[Const]? FieldsDefinition?
   object_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("type")
-    |> concat(name)
-    |> optional(implements_interfaces)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__implements_interfaces__))
+    |> optional(parsec(:__directives__))
     |> optional(fields_definition)
 
   # InterfaceTypeDefinition : Description? interface Name Directives[Const]? FieldsDefinition?
   interface_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("interface")
-    |> concat(name)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__directives__))
     |> optional(fields_definition)
 
   # InterfaceTypeExtension :
@@ -688,13 +704,13 @@ defmodule Absinthe.Parser do
     choice([
       string("extend")
       |> string("interface")
-      |> concat(name)
-      |> optional(directives)
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__directives__))
       |> concat(fields_definition),
       string("extend")
       |> string("interface")
-      |> concat(name)
-      |> concat(directives)
+      |> concat(parsec(:__name__))
+      |> concat(parsec(:__directives__))
     ])
 
   # UnionMemberTypes :
@@ -704,20 +720,20 @@ defmodule Absinthe.Parser do
     choice([
       ascii_char([?=])
       |> optional(ascii_char([?|]))
-      |> concat(named_type),
+      |> concat(parsec(:__named_type__)),
       parsec(:__union_member_types__)
       |> ascii_char([?|])
-      |> concat(named_type)
+      |> concat(parsec(:__named_type__))
     ])
 
   defparsec(:__union_member_types__, union_member_types)
 
   # UnionTypeDefinition : Description? union Name Directives[Const]? UnionMemberTypes?
   union_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("union")
-    |> concat(name)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__directives__))
     |> optional(union_member_types)
 
   # UnionTypeExtension :
@@ -727,22 +743,22 @@ defmodule Absinthe.Parser do
     choice([
       string("extend")
       |> string("union")
-      |> concat(name)
-      |> optional(directives)
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__directives__))
       |> concat(union_member_types),
       string("extend")
       |> string("union")
-      |> concat(name)
-      |> concat(directives)
+      |> concat(parsec(:__name__))
+      |> concat(parsec(:__directives__))
     ])
 
   # EnumValueDefinition : Description? EnumValue Directives[Const]?
   enum_value_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> concat(enum_value)
-    |> optional(directives)
+    |> optional(parsec(:__directives__))
 
-  # EnumValuesDefinition : { EnumValueDefinition+ }
+  # EnumValuesDefinitn : { EnumValueDefinition+ }
   enum_values_definition =
     ascii_char([?{])
     |> times(enum_value_definition, min: 1)
@@ -750,10 +766,10 @@ defmodule Absinthe.Parser do
 
   # EnumTypeDefinition : Description? enum Name Directives[Const]? EnumValuesDefinition?
   enum_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("enum")
-    |> concat(name)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__directives__))
     |> optional(enum_values_definition)
 
   # EnumTypeExtension :
@@ -763,13 +779,13 @@ defmodule Absinthe.Parser do
     choice([
       string("extend")
       |> string("enum")
-      |> concat(name)
-      |> optional(directives)
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__directives__))
       |> concat(enum_values_definition),
       string("extend")
       |> string("enum")
-      |> concat(name)
-      |> concat(directives)
+      |> concat(parsec(:__name__))
+      |> concat(parsec(:__directives__))
     ])
 
   # InputFieldsDefinition : { InputValueDefinition+ }
@@ -780,10 +796,10 @@ defmodule Absinthe.Parser do
 
   # InputObjectTypeDefinition : Description? input Name Directives[Const]? InputFieldsDefinition?
   input_object_type_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("input")
-    |> concat(name)
-    |> optional(directives)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__directives__))
     |> optional(input_fields_definition)
 
   # InputObjectTypeExtension :
@@ -793,13 +809,13 @@ defmodule Absinthe.Parser do
     choice([
       string("extend")
       |> string("input")
-      |> concat(name)
-      |> optional(directives)
+      |> concat(parsec(:__name__))
+      |> optional(parsec(:__directives__))
       |> concat(input_fields_definition),
       string("extend")
       |> string("input")
-      |> concat(name)
-      |> concat(directives)
+      |> concat(parsec(:__name__))
+      |> concat(parsec(:__directives__))
     ])
 
   # ExecutableDirectiveLocation : one of
@@ -873,11 +889,11 @@ defmodule Absinthe.Parser do
 
   # DirectiveDefinition : Description? directive @ Name ArgumentsDefinition? on DirectiveLocations
   directive_definition =
-    optional(description)
+    optional(parsec(:__description__))
     |> string("directive")
     |> ascii_char([?@])
-    |> concat(name)
-    |> optional(arguments_definition)
+    |> concat(parsec(:__name__))
+    |> optional(parsec(:__arguments_definition__))
     |> string("on")
     |> concat(directive_locations)
 
@@ -940,9 +956,9 @@ defmodule Absinthe.Parser do
   # Document : Definition+
   document =
     empty()
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> repeat(definition)
-    |> concat(skip_ignored)
+    |> concat(parsec(:__skip_ignored__))
     |> traverse({:build_blueprint, []})
 
   defp build_blueprint("", definitions, context, _, _) do
