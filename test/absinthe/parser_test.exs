@@ -92,17 +92,7 @@ defmodule Absinthe.ParserTest do
                Absinthe.Parser.__string_value__(~S("one\u000Atwo"))
     end
   end
-
-  describe "punctuator" do
-    test "with !" do
-      assert {:ok, [:exclamation], "", _, _, _} = Absinthe.Parser.__punctuator__(~S(!))
-    end
-
-    test "with ..." do
-      assert {:ok, [:ellipsis], "", _, _, _} = Absinthe.Parser.__punctuator__(~S(...))
-    end
-  end
-
+  
   describe ".parse" do
     test "returns a document for a single field" do
       assert {:ok,
