@@ -93,6 +93,8 @@ defmodule Absinthe.Parser do
   #   - StringValue
 
   # Punctuator :: one of ! $ ( ) ... : = @ [ ] { | }
+  # Note: No `punctuator` combinator(s) defined; these characters are matched
+  #       explicitly with `ascii_char/1` in other combinators.
 
   # Name :: /[_A-Za-z][_0-9A-Za-z]*/
   name =
