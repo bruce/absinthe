@@ -18,7 +18,6 @@ defmodule Absinthe.Parser do
       @space..@unicode_final
     ])
 
-
   # ## Ignored Tokens
 
   # UnicodeBOM :: "Byte Order Mark (U+FEFF)"
@@ -78,11 +77,11 @@ defmodule Absinthe.Parser do
       line_terminator,
       comment,
       comma
-    ])  
+    ])
 
   skip_ignored =
     empty()
-    |> repeat(ignore(ignored))    
+    |> repeat(ignore(ignored))
 
   # ## Lexical Tokens
 
@@ -113,7 +112,7 @@ defmodule Absinthe.Parser do
   digit = ascii_char([?0..?9])
 
   # NonZeroDigit :: Digit but not `0`
-  non_zero_digit = ascii_char([?1..?9])  
+  non_zero_digit = ascii_char([?1..?9])
 
   # IntegerPart ::
   #   - NegativeSign? 0
@@ -148,13 +147,13 @@ defmodule Absinthe.Parser do
   # FractionalPart :: . Digit+
   fractional_part =
     ascii_char([?.])
-    |> times(digit, min: 1)  
+    |> times(digit, min: 1)
 
   # ExponentIndicator :: one of `e` `E`
   exponent_indicator = ascii_char([?e, ?E])
 
   # Sign :: one of + -
-  sign = ascii_char([?+, ?-])  
+  sign = ascii_char([?+, ?-])
 
   # ExponentPart :: ExponentIndicator Sign? Digit+
   exponent_part =
@@ -187,7 +186,7 @@ defmodule Absinthe.Parser do
     {[value], context}
   end
 
-  defparsec(:__float_value__, float_value)    
+  defparsec(:__float_value__, float_value)
 
   # EscapedUnicode :: /[0-9A-Fa-f]{4}/
   escaped_unicode =
@@ -199,7 +198,7 @@ defmodule Absinthe.Parser do
     value = :httpd_util.hexlist_to_integer(code)
     binary = :unicode.characters_to_binary([value])
     {[binary], context}
-  end  
+  end
 
   # EscapedCharacter :: one of `"` \ `/` b f n r t
   escaped_character =
@@ -212,7 +211,7 @@ defmodule Absinthe.Parser do
       ascii_char([?n]) |> replace(?\n),
       ascii_char([?r]) |> replace(?\r),
       ascii_char([?t]) |> replace(?\t)
-    ]) 
+    ])
 
   # StringCharacter ::
   #   - SourceCharacter but not `"` or \ or LineTerminator
@@ -231,8 +230,7 @@ defmodule Absinthe.Parser do
 
   # Note: Block string values are interpreted to exclude blank initial and trailing
   # lines and uniform indentation with {BlockStringValue()}.
-  _block_string_character =
-    string("BLOCK_STRING_STUB")
+  _block_string_character = string("BLOCK_STRING_STUB")
 
   # StringValue ::
   #   - `"` StringCharacter* `"`
@@ -314,8 +312,7 @@ defmodule Absinthe.Parser do
   end
 
   # NamedType : Name
-  named_type =
-    name
+  named_type = name
 
   # TypeCondition : on NamedType
   type_condition =
@@ -326,7 +323,6 @@ defmodule Absinthe.Parser do
   boolean_value =
     choice([
       string("true"),
-
       string("false")
     ])
 
@@ -342,7 +338,7 @@ defmodule Absinthe.Parser do
     defp error_when_next_is_not_enum_value(<<unquote(text), _::binary>>, _context, _line, _offset) do
       {:error, "not a valid enum value"}
     end
-  end 
+  end
 
   # ListValue[Const] :
   #   - [ ]
@@ -351,7 +347,6 @@ defmodule Absinthe.Parser do
     choice([
       ascii_char([?[])
       |> ascii_char([?]]),
-
       ascii_char([?[])
       |> times(parsec(:__value__), min: 1)
       |> ascii_char([?]])
@@ -370,7 +365,6 @@ defmodule Absinthe.Parser do
     choice([
       ascii_char([?{])
       |> ascii_char([?{]),
-
       ascii_char([?{])
       |> times(object_field, min: 1)
       |> ascii_char([?{])
@@ -403,7 +397,8 @@ defmodule Absinthe.Parser do
       list_value,
       object_value
     ])
-  defparsec :__value__, value
+
+  defparsec(:__value__, value)
 
   # Argument[Const] : Name : Value[?Const]
   argument =
@@ -424,8 +419,7 @@ defmodule Absinthe.Parser do
     |> optional(arguments)
 
   # Directives[Const] : Directive[?Const]+
-  directives =
-    times(directive, min: 1)
+  directives = times(directive, min: 1)
 
   # FragmentDefinition : fragment FragmentName TypeCondition Directives? SelectionSet
   fragment_definition =
@@ -476,7 +470,7 @@ defmodule Absinthe.Parser do
     |> ignore(ascii_char([?}]))
     |> concat(skip_ignored)
 
-  defparsec :__selection_set__, selection_set
+  defparsec(:__selection_set__, selection_set)
 
   # DefaultValue : = Value[Const]
   default_value =
@@ -552,7 +546,6 @@ defmodule Absinthe.Parser do
     choice([
       named_type
       |> ascii_char([?!]),
-
       list_type
       |> ascii_char([?!])
     ])
@@ -568,7 +561,7 @@ defmodule Absinthe.Parser do
       non_null_type
     ])
 
-  defparsec :__type__, type
+  defparsec(:__type__, type)
 
   # OperationTypeDefinition : OperationType : NamedType
   operation_type_definition =
@@ -585,8 +578,7 @@ defmodule Absinthe.Parser do
     |> ascii_char([?}])
 
   # Description : StringValue
-  description =
-    string_value
+  description = string_value
 
   # ScalarTypeDefinition : Description? scalar Name Directives[Const]?
   scalar_type_definition =
@@ -611,13 +603,12 @@ defmodule Absinthe.Parser do
       string("implements")
       |> optional(ascii_char([?&]))
       |> concat(named_type),
-
       parsec(:__implements_interfaces__)
       |> ascii_char([?&])
       |> concat(named_type)
     ])
 
-  defparsec :__implements_interfaces__, implements_interfaces
+  defparsec(:__implements_interfaces__, implements_interfaces)
 
   # InputValueDefinition : Description? Name : Type DefaultValue? Directives[Const]?
   input_value_definition =
@@ -660,13 +651,11 @@ defmodule Absinthe.Parser do
       |> optional(implements_interfaces)
       |> optional(directives)
       |> concat(fields_definition),
-
       string("extend")
       |> string("type")
       |> concat(name)
       |> optional(implements_interfaces)
       |> concat(directives),
-
       string("extend")
       |> string("type")
       |> concat(name)
@@ -681,7 +670,6 @@ defmodule Absinthe.Parser do
     |> optional(implements_interfaces)
     |> optional(directives)
     |> optional(fields_definition)
-
 
   # InterfaceTypeDefinition : Description? interface Name Directives[Const]? FieldsDefinition?
   interface_type_definition =
@@ -701,7 +689,6 @@ defmodule Absinthe.Parser do
       |> concat(name)
       |> optional(directives)
       |> concat(fields_definition),
-
       string("extend")
       |> string("interface")
       |> concat(name)
@@ -716,13 +703,12 @@ defmodule Absinthe.Parser do
       ascii_char([?=])
       |> optional(ascii_char([?|]))
       |> concat(named_type),
-
       parsec(:__union_member_types__)
       |> ascii_char([?|])
       |> concat(named_type)
     ])
 
-  defparsec :__union_member_types__, union_member_types
+  defparsec(:__union_member_types__, union_member_types)
 
   # UnionTypeDefinition : Description? union Name Directives[Const]? UnionMemberTypes?
   union_type_definition =
@@ -742,7 +728,6 @@ defmodule Absinthe.Parser do
       |> concat(name)
       |> optional(directives)
       |> concat(union_member_types),
-
       string("extend")
       |> string("union")
       |> concat(name)
@@ -779,7 +764,6 @@ defmodule Absinthe.Parser do
       |> concat(name)
       |> optional(directives)
       |> concat(enum_values_definition),
-
       string("extend")
       |> string("enum")
       |> concat(name)
@@ -810,7 +794,6 @@ defmodule Absinthe.Parser do
       |> concat(name)
       |> optional(directives)
       |> concat(input_fields_definition),
-      
       string("extend")
       |> string("input")
       |> concat(name)
@@ -869,7 +852,6 @@ defmodule Absinthe.Parser do
   directive_location =
     choice([
       executable_directive_location,
-
       type_system_directive_location
     ])
 
@@ -880,14 +862,12 @@ defmodule Absinthe.Parser do
     choice([
       ignore(ascii_char([?|]))
       |> concat(directive_location),
-
       parsec(:__directive_locations__)
       |> ignore(ascii_char([?|]))
       |> concat(directive_location)
     ])
 
-  defparsec :__directive_locations__, directive_locations
-
+  defparsec(:__directive_locations__, directive_locations)
 
   # DirectiveDefinition : Description? directive @ Name ArgumentsDefinition? on DirectiveLocations
   directive_definition =
@@ -896,7 +876,7 @@ defmodule Absinthe.Parser do
     |> ascii_char([?@])
     |> concat(name)
     |> optional(arguments_definition)
-    |> string("on")    
+    |> string("on")
     |> concat(directive_locations)
 
   # TypeDefinition :
@@ -981,7 +961,7 @@ defmodule Absinthe.Parser do
     end)
   end
 
-  defparsec(:__document__, document)       
+  defparsec(:__document__, document)
 
   def parse(input) do
     case __document__(input) do
